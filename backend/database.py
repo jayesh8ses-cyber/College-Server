@@ -45,12 +45,19 @@ if not init_error:
     except Exception as e:
         init_error = f"Firestore Client Error: {str(e)}"
 
+from fastapi import HTTPException, status
+
 def get_db():
     if init_error:
-        # We can't yield db if it failed. Raise http exception or yield None?
-        # Better to raise exception inside the dependency usage but we are in a generator.
-        # We'll handle checking this in the health endpoint or main.
-        # For now yield None or raise. raising here might crash the request.
-        pass 
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database initialization failed: {init_error}"
+        )
+    if not db:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database client is not initialized"
+        )
     yield db
+
 
