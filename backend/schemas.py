@@ -11,7 +11,7 @@ class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
-    id: int
+    id: str
     
     class Config:
         orm_mode = True
@@ -31,22 +31,22 @@ class GroupCreate(GroupBase):
     pass
 
 class Group(GroupBase):
-    id: int
-    creator_id: int
+    id: str
+    creator_id: str
     
     class Config:
         orm_mode = True
 
 class MessageBase(BaseModel):
     content: str
-    group_id: int
+    group_id: str
 
 class MessageCreate(MessageBase):
     pass
 
 class Message(MessageBase):
-    id: int
-    sender_id: int
+    id: str
+    sender_id: str
     timestamp: datetime
     
     class Config:

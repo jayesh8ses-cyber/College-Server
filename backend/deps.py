@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from google.cloud import firestore
 from jose import JWTError, jwt
 from . import database, models, auth, schemas
 
@@ -13,7 +13,8 @@ def get_db():
     finally:
         db.close()
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: firestore.Client = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -27,7 +28,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         token_data = schemas.TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = db.query(models.User).filter(models.User.username == token_data.username).first()
-    if user is None:
+    
+    # helper to get user from firestore
+    # We used username as doc ID in migration, let's stick to that or query?
+    # In crud (to be written), we might use username as ID.
+    doc_ref = db.collection("users").document(token_data.username)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
         raise credentials_exception
-    return user
+    
+    user_data = doc.to_dict()
+    # Return object with attribute access for compatibility? 
+    # Or just dict if we update code to use dicts.
+    # Pydantic models (User) can read from dicts if orm_mode=False or specific handling.
+    # models.User was a sqlalchemy class. We should probably return a SimpleNamespace or Pydantic model.
+    # Let's map it to a simple class or the Schema itself if possible, but the rest of the app expects attributes.
+    
+    class UserObj:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+            self.id = kwargs.get('username') # ID in schema is str.
+            
+    return UserObj(**user_data)
+
