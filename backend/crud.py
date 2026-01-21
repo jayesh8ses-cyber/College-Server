@@ -1,6 +1,7 @@
 
 from google.cloud import firestore
-from . import schemas, auth, models
+import schemas, auth
+# models import removed as we use Firestore dicts now
 import datetime
 
 # We are mocking models.User behavior with a simple class or dict in deps, 
