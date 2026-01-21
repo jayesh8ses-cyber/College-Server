@@ -2,8 +2,20 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import firestore
-from . import schemas, auth, crud, deps
 from typing import List
+import sys
+import os
+
+# Adjust path to find sibling modules if running as script
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    # Try absolute import (works if project root is in path, e.g. Vercel)
+    from backend import schemas, auth, crud, deps, database
+except ImportError:
+    # Fallback to local import (works if running directly inside backend/)
+    import schemas, auth, crud, deps, database
+
 
 # models import removed as we use Firestore dicts/SimpleObjs now.
 # If models are needed for Pydantic response_model, we use schemas.*
