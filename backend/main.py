@@ -18,6 +18,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health_check():
+    if database.init_error:
+        return {"status": "error", "detail": database.init_error}
+    if not database.db:
+        return {"status": "error", "detail": "Database client is None"}
+    return {"status": "ok", "message": "Backend is running and connected to Firebase"}
+
+
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: firestore.Client = Depends(deps.get_db)):
     user = crud.get_user_by_username(db, username=form_data.username)
