@@ -7,7 +7,7 @@ from typing import List
 
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="College Share API")
+app = FastAPI(title="College Share API", root_path="/api")
 
 app.add_middleware(
     CORSMiddleware,
