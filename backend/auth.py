@@ -2,9 +2,18 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import os
+import secrets
 
-# SECRET_KEY should be in env var in production
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+# Read SECRET_KEY from environment variable
+# Generate a secure random key if not provided (for local development)
+_default_key = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+SECRET_KEY = os.getenv("SECRET_KEY", _default_key)
+
+# Warn if using default key
+if SECRET_KEY == _default_key:
+    print("⚠️  WARNING: Using default SECRET_KEY. Set SECRET_KEY environment variable in production!")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

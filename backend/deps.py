@@ -3,16 +3,15 @@ from fastapi.security import OAuth2PasswordBearer
 from google.cloud import firestore
 from jose import JWTError, jwt
 import database, auth, schemas
-# models import removed as we use Firestore dicts now
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# Use tokenUrl with /api prefix to work with Vercel routing
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token")
 
+# Import get_db from database module instead of redefining it
 def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """Wrapper to use database.get_db() as a dependency"""
+    yield from database.get_db()
+
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: firestore.Client = Depends(get_db)):
