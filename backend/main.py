@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from google.cloud import firestore
+from pymongo.database import Database
 from typing import List
 import os
 
@@ -30,14 +30,14 @@ def health_check():
         return {"status": "error", "detail": database.init_error}
     if not database.db:
         return {"status": "error", "detail": "Database client is None"}
-    return {"status": "ok", "message": "Backend is running and connected to Firebase"}
+    return {"status": "ok", "message": "Backend is running and connected to MongoDB"}
 
 
 # Authentication endpoint
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: firestore.Client = Depends(deps.get_db)
+    db: Database = Depends(deps.get_db)
 ):
     user = crud.get_user_by_username(db, username=form_data.username)
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
@@ -54,7 +54,7 @@ async def login_for_access_token(
 
 # User endpoints
 @app.post("/users/", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: firestore.Client = Depends(deps.get_db)):
+def create_user(user: schemas.UserCreate, db: Database = Depends(deps.get_db)):
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -70,7 +70,7 @@ async def read_users_me(current_user: schemas.User = Depends(deps.get_current_us
 @app.post("/groups/", response_model=schemas.Group)
 def create_group(
     group: schemas.GroupCreate, 
-    db: firestore.Client = Depends(deps.get_db),
+    db: Database = Depends(deps.get_db),
     current_user: schemas.User = Depends(deps.get_current_user)
 ):
     if not current_user.is_senior:
@@ -79,7 +79,7 @@ def create_group(
 
 
 @app.get("/groups/", response_model=List[schemas.Group])
-def read_groups(skip: int = 0, limit: int = 100, db: firestore.Client = Depends(deps.get_db)):
+def read_groups(skip: int = 0, limit: int = 100, db: Database = Depends(deps.get_db)):
     return crud.get_groups(db, skip=skip, limit=limit)
 
 
@@ -88,7 +88,7 @@ def read_groups(skip: int = 0, limit: int = 100, db: firestore.Client = Depends(
 def create_message_for_group(
     group_id: str, 
     message: schemas.MessageBase, 
-    db: firestore.Client = Depends(deps.get_db),
+    db: Database = Depends(deps.get_db),
     current_user: schemas.User = Depends(deps.get_current_user)
 ):
     if message.group_id != group_id:
@@ -98,5 +98,5 @@ def create_message_for_group(
 
 
 @app.get("/groups/{group_id}/messages/", response_model=List[schemas.Message])
-def read_messages(group_id: str, db: firestore.Client = Depends(deps.get_db)):
+def read_messages(group_id: str, db: Database = Depends(deps.get_db)):
     return crud.get_messages(db, group_id=group_id)

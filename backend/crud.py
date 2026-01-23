@@ -1,23 +1,22 @@
-
-from google.cloud import firestore
+from pymongo.database import Database
 from fastapi import HTTPException, status
 import schemas, auth
-import datetime
+from datetime import datetime
+from bson import ObjectId
 
-# Simple object wrapper for Firestore data
+# Simple object wrapper for MongoDB data
 class SimpleObj:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
 
-def get_user(db: firestore.Client, user_id: str):
+def get_user(db: Database, user_id: str):
     """Get user by ID (username)"""
     try:
-        doc = db.collection("users").document(user_id).get()
-        if doc.exists:
-            data = doc.to_dict()
-            data['id'] = user_id
-            return SimpleObj(**data)
+        user_data = db.users.find_one({"username": user_id})
+        if user_data:
+            user_data['id'] = user_data['username']
+            return SimpleObj(**user_data)
         return None
     except Exception as e:
         raise HTTPException(
@@ -26,12 +25,12 @@ def get_user(db: firestore.Client, user_id: str):
         )
 
 
-def get_user_by_username(db: firestore.Client, username: str):
-    """Get user by username (using username as doc ID)"""
+def get_user_by_username(db: Database, username: str):
+    """Get user by username"""
     return get_user(db, username)
 
 
-def create_user(db: firestore.Client, user: schemas.UserCreate):
+def create_user(db: Database, user: schemas.UserCreate):
     """Create a new user"""
     try:
         hashed_password = auth.get_password_hash(user.password)
@@ -39,19 +38,20 @@ def create_user(db: firestore.Client, user: schemas.UserCreate):
             "username": user.username,
             "email": user.email,
             "hashed_password": hashed_password,
-            "is_senior": user.is_senior
+            "is_senior": user.is_senior,
+            "created_at": datetime.utcnow()
         }
         
         # Check if user already exists
-        existing_user = db.collection("users").document(user.username).get()
-        if existing_user.exists:
+        existing_user = db.users.find_one({"username": user.username})
+        if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already registered"
             )
         
-        # Create user document
-        db.collection("users").document(user.username).set(user_data)
+        # Insert user
+        db.users.insert_one(user_data)
         
         user_data['id'] = user.username
         return SimpleObj(**user_data)
@@ -64,20 +64,19 @@ def create_user(db: firestore.Client, user: schemas.UserCreate):
         )
 
 
-def create_group(db: firestore.Client, group: schemas.GroupCreate, user_id: str):
+def create_group(db: Database, group: schemas.GroupCreate, user_id: str):
     """Create a new group"""
     try:
         group_data = group.dict()
         group_data['creator_id'] = user_id
-        group_data['created_at'] = firestore.SERVER_TIMESTAMP
+        group_data['created_at'] = datetime.utcnow()
         
-        # Auto-generate ID
-        _, doc_ref = db.collection("groups").add(group_data)
+        # Insert group
+        result = db.groups.insert_one(group_data)
         
-        # Fetch the document to get the server timestamp
-        created_doc = doc_ref.get()
-        group_data = created_doc.to_dict()
-        group_data['id'] = doc_ref.id
+        # Get the inserted document
+        group_data['id'] = str(result.inserted_id)
+        group_data['_id'] = result.inserted_id
         
         return SimpleObj(**group_data)
     except Exception as e:
@@ -87,15 +86,14 @@ def create_group(db: firestore.Client, group: schemas.GroupCreate, user_id: str)
         )
 
 
-def get_groups(db: firestore.Client, skip: int = 0, limit: int = 100):
+def get_groups(db: Database, skip: int = 0, limit: int = 100):
     """Get all groups with pagination"""
     try:
-        docs = db.collection("groups").limit(limit).offset(skip).stream()
+        cursor = db.groups.find().skip(skip).limit(limit)
         groups = []
-        for doc in docs:
-            data = doc.to_dict()
-            data['id'] = doc.id
-            groups.append(SimpleObj(**data))
+        for doc in cursor:
+            doc['id'] = str(doc['_id'])
+            groups.append(SimpleObj(**doc))
         return groups
     except Exception as e:
         raise HTTPException(
@@ -104,30 +102,28 @@ def get_groups(db: firestore.Client, skip: int = 0, limit: int = 100):
         )
 
 
-def create_message(db: firestore.Client, message: schemas.MessageBase, sender_id: str):
+def create_message(db: Database, message: schemas.MessageBase, sender_id: str):
     """Create a new message in a group"""
     try:
-        msg_data = message.dict()
-        msg_data['sender_id'] = sender_id
-        msg_data['timestamp'] = firestore.SERVER_TIMESTAMP
-        
         # Verify group exists
-        group_ref = db.collection("groups").document(message.group_id)
-        group_doc = group_ref.get()
+        group = db.groups.find_one({"_id": ObjectId(message.group_id)})
         
-        if not group_doc.exists:
+        if not group:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Group not found"
             )
         
-        # Add message to subcollection
-        _, doc_ref = group_ref.collection("messages").add(msg_data)
+        msg_data = message.dict()
+        msg_data['sender_id'] = sender_id
+        msg_data['timestamp'] = datetime.utcnow()
+        msg_data['group_id'] = message.group_id
         
-        # Fetch the created message to get server timestamp
-        created_msg = doc_ref.get()
-        msg_data = created_msg.to_dict()
-        msg_data['id'] = doc_ref.id
+        # Insert message
+        result = db.messages.insert_one(msg_data)
+        
+        msg_data['id'] = str(result.inserted_id)
+        msg_data['_id'] = result.inserted_id
         
         return SimpleObj(**msg_data)
     except HTTPException:
@@ -139,26 +135,24 @@ def create_message(db: firestore.Client, message: schemas.MessageBase, sender_id
         )
 
 
-def get_messages(db: firestore.Client, group_id: str):
+def get_messages(db: Database, group_id: str):
     """Get all messages for a group"""
     try:
         # Verify group exists
-        group_ref = db.collection("groups").document(group_id)
-        group_doc = group_ref.get()
+        group = db.groups.find_one({"_id": ObjectId(group_id)})
         
-        if not group_doc.exists:
+        if not group:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Group not found"
             )
         
         # Get messages ordered by timestamp
-        docs = group_ref.collection("messages").order_by("timestamp").stream()
+        cursor = db.messages.find({"group_id": group_id}).sort("timestamp", 1)
         messages = []
-        for doc in docs:
-            data = doc.to_dict()
-            data['id'] = doc.id
-            messages.append(SimpleObj(**data))
+        for doc in cursor:
+            doc['id'] = str(doc['_id'])
+            messages.append(SimpleObj(**doc))
         return messages
     except HTTPException:
         raise
