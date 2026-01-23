@@ -1,13 +1,12 @@
 {
-  "buildCommand": "echo 'No build needed'",
-  "outputDirectory": ".",
+  "version": 2,
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python"
     },
     {
-      "src": "index.html",
+      "src": "public/**",
       "use": "@vercel/static"
     }
   ],
@@ -17,12 +16,12 @@
       "dest": "/api/index.py"
     },
     {
-      "src": "/(.*\\.(js|css|html|png|jpg|jpeg|gif|svg|ico))",
-      "dest": "/$1"
+      "src": "/",
+      "dest": "/public/index.html"
     },
     {
-      "src": "/",
-      "dest": "/index.html"
+      "src": "/(.*)",
+      "dest": "/public/$1"
     }
   ]
 }
